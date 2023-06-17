@@ -12,7 +12,7 @@ add_definitions(
   -D__STDC_CONSTANT_MACROS
 )
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti -std=c++11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti ")
 
 set(SOURCE_FILES GetLabeledStmts.cpp)
 add_executable(get-labeled-stmts ${SOURCE_FILES})
