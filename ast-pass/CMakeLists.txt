@@ -30,27 +30,37 @@ target_link_libraries(get-labeled-stmts
   clangEdit
   clangLex
   clangTooling
+  clangTransformer
 )
 
 target_link_libraries(get-labeled-stmts
   LLVMX86AsmParser # MC, MCParser, Support, X86Desc, X86Info
   LLVMX86Desc # MC, Support, X86AsmPrinter, X86Info
-  LLVMX86AsmPrinter # MC, Support, X86Utils
-  LLVMX86Info # MC, Support, Target
-  LLVMX86Utils # Core, Support
+  LLVMAsmPrinter # MC, Support, X86Utils
   LLVMipo
   LLVMScalarOpts
   LLVMInstCombine
   LLVMTransformUtils
+  LLVMTarget
   LLVMAnalysis
   LLVMTarget
   LLVMOption # Support
+  LLVMProfileData
   LLVMMCParser # MC, Support
   LLVMMC # Object, Support
   LLVMObject # BitReader, Core, Support
   LLVMBitReader # Core, Support
   LLVMCore # Support
   LLVMSupport
+  LLVMFrontendOpenMP
+  LLVMBitstreamReader
+  LLVMRemarks
+  LLVMDWARFLinker
+  LLVMDebugInfoDWARF
+  LLVMObject
+  LLVMBinaryFormat
+  LLVMDemangle
+
 )
 
 include(FindCurses)

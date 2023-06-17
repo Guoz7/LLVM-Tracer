@@ -1,0 +1,22 @@
+28a29
+> #include "clang/AST/Stmt.h"
+37c38
+< #include "llvm/Support/Debug.h"
+---
+> //#include "llvm/Support/Debug.h"
+116c117
+<     SourceLocation loc = subStmt->getLocStart();
+---
+>     SourceLocation loc = subStmt->getBeginLoc();
+309a311,317
+> class MyOptionsParser : public CommonOptionsParser {
+> public:
+>   MyOptionsParser(int &argc, const char **argv, cl::OptionCategory &Category)
+>       : CommonOptionsParser(argc, argv, Category) {
+>     // 在构造函数中进行您的自定义逻辑
+>   }
+> };
+312c320
+<   CommonOptionsParser op(argc, argv, GetLabelStmtsCat);
+---
+>   MyOptionsParser op(argc, argv, GetLabelStmtsCat);

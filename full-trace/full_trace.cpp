@@ -154,7 +154,7 @@ static Constant *createStringArg(const char *string, Module *curr_module) {
 
 int getMemSize(Type *T) {
   int size = 0;
-  if (T->isPointerTy())
+  if (T->isPointerTy()||T->isMetadataTy())
     return 8 * 8;
   else if (T->isFunctionTy())
     size = 0;
@@ -193,15 +193,18 @@ int getMemSize(Type *T) {
       assert(false);
     }
   } else if (T->isIntegerTy()) {
-    size = cast<IntegerType>(T)->getBitWidth();
+    //size = dyn_cast<IntegerType>(T)->getBitWidth();
+    size = T->getIntegerBitWidth();
   } else if (T->isVectorTy()) {
-    size = cast<VectorType>(T)->getBitWidth();
+    unsigned numElements = cast<VectorType>(T)->getArrayNumElements();
+    unsigned bitWidth = cast<VectorType>(T)->getElementType()->getScalarSizeInBits();
+    size = numElements * bitWidth;
   } else if (T->isArrayTy()) {
     ArrayType *A = dyn_cast<ArrayType>(T);
     size = (int)A->getNumElements() *
            A->getElementType()->getPrimitiveSizeInBits();
   } else {
-    errs() << "[ERROR]: Unknown data type " << *T << "\n";
+    errs() << "[ERROR]: Unknown data type " << T->getTypeID() << "\n";
     assert(false);
   }
 
@@ -225,15 +228,26 @@ bool Tracer::doInitialization(Module &M) {
   auto DoubleTy = Type::getDoubleTy(llvm_context);
 
   // Add external trace_logger function declarations.
-  TL_log_entry = M.getOrInsertFunction("trace_logger_log_entry", VoidTy,
-                                       I8PtrTy, I64Ty);
-
-  TL_log0 = M.getOrInsertFunction( "trace_logger_log0", VoidTy,
+  auto Callee1 = M.getOrInsertFunction("trace_logger_log_entry", VoidTy,
+                                      I8PtrTy, I64Ty);
+  TL_log_entry = cast<Constant>(Callee1.getCallee());
+  TL_log_entry_type = Callee1.getFunctionType();
+  //TL_log_entry = M.getOrInsertFunction("trace_logger_log_entry", VoidTy,
+  //                                     I8PtrTy, I64Ty);
+  Callee1 = M.getOrInsertFunction( "trace_logger_log0", VoidTy,
       I64Ty, I8PtrTy, I8PtrTy, I8PtrTy, I64Ty, I1Ty, I1Ty);
+  TL_log0 = cast<Constant>(Callee1.getCallee());
+  TL_log0_type = Callee1.getFunctionType();
+  //TL_log0 = M.getOrInsertFunction( "trace_logger_log0", VoidTy,
+      //I64Ty, I8PtrTy, I8PtrTy, I8PtrTy, I64Ty, I1Ty, I1Ty);
 
-  TL_log_int = M.getOrInsertFunction( "trace_logger_log_int", VoidTy,
+  Callee1 = M.getOrInsertFunction( "trace_logger_log_int", VoidTy,
       I64Ty, I64Ty, I64Ty, I64Ty, I8PtrTy, I64Ty, I8PtrTy);
-
+  TL_log_int = cast<Constant>(Callee1.getCallee());
+  TL_log_int_type = Callee1.getFunctionType();
+  //TL_log_int = M.getOrInsertFunction( "trace_logger_log_int", VoidTy,
+    //  I64Ty, I64Ty, I64Ty, I64Ty, I8PtrTy, I64Ty, I8PtrTy);
+/*
   TL_log_ptr = M.getOrInsertFunction( "trace_logger_log_ptr", VoidTy,
       I64Ty, I64Ty, I64Ty, I64Ty, I8PtrTy, I64Ty, I8PtrTy);
 
@@ -249,6 +263,28 @@ bool Tracer::doInitialization(Module &M) {
 
   TL_update_status = M.getOrInsertFunction("trace_logger_update_status", VoidTy,
                                            I8PtrTy, I64Ty, I1Ty, I1Ty);
+*/
+
+ Callee1 = M.getOrInsertFunction("trace_logger_log_ptr", VoidTy, I64Ty, I64Ty, I64Ty, I64Ty, I8PtrTy, I64Ty, I8PtrTy);
+TL_log_ptr = cast<llvm::Function>(Callee1.getCallee());
+TL_log_ptr_type = Callee1.getFunctionType();
+
+Callee1 = M.getOrInsertFunction("trace_logger_log_string", VoidTy, I64Ty, I64Ty, I8PtrTy, I64Ty, I8PtrTy, I64Ty, I8PtrTy);
+TL_log_string = cast<llvm::Function>(Callee1.getCallee());
+TL_log_string_type = Callee1.getFunctionType();
+
+Callee1 = M.getOrInsertFunction("trace_logger_log_double", VoidTy, I64Ty, I64Ty, DoubleTy, I64Ty, I8PtrTy, I64Ty, I8PtrTy);
+TL_log_double = cast<llvm::Function>(Callee1.getCallee());
+TL_log_double_type =  Callee1.getFunctionType();
+
+Callee1 = M.getOrInsertFunction("trace_logger_log_vector", VoidTy, I64Ty, I64Ty, I8PtrTy, I64Ty, I8PtrTy, I64Ty, I8PtrTy);
+TL_log_vector = cast<llvm::Function>(Callee1.getCallee());
+TL_log_vector_type = Callee1.getFunctionType();
+
+Callee1 = M.getOrInsertFunction("trace_logger_update_status", VoidTy, I8PtrTy, I64Ty, I1Ty, I1Ty);
+TL_update_status = cast<llvm::Function>(Callee1.getCallee());
+TL_update_status_type = Callee1.getFunctionType();
+
 
   // We will instrument in top level mode if there is only one workload
   // function or if explicitly told to do so.
@@ -259,15 +295,27 @@ bool Tracer::doInitialization(Module &M) {
   curr_module = &M;
   curr_function = nullptr;
   debugInfoFinder.processModule(M);
+  std::ofstream file("file.txt");
+  std::string name_output;
 
   auto it = debugInfoFinder.subprograms().begin();
   auto eit = debugInfoFinder.subprograms().end();
-
+  //unsigned num;
   for (auto i = it; i != eit; ++i) {
     DISubprogram* const S = (*i);
     StringRef mangledName = S->getLinkageName();
     StringRef name = S->getName();
 
+    errs()<<"mangledName: "<<mangledName.str()<<"\n";
+    errs()<<"name: "<<name.str()<<"\n";
+    errs()<<"hello\n";
+    errs()<<"DIfile.name:"<<S->getFile()->getFilename().str()<<"\n";
+    errs()<<"DIfile.directory"<<S->getFile()->getDirectory().str()<<"\n";
+    //errs()<<name_output<<"\n";
+    //errs()<<"hi\n";
+    //errs()<<name<<"\n";
+    //errs()<<"hi\n";
+    //file<<mangledName.str()<<endl;
     assert(name.size() || mangledName.size());
     if (!mangledName.empty()) {
       mangledNameMap[mangledName] = name;
@@ -276,10 +324,10 @@ bool Tracer::doInitialization(Module &M) {
     }
 
     // Checks out whether Name or Mangled Name matches.
-    auto MangledIt = user_workloads.find(mangledName);
+    auto MangledIt = user_workloads.find(mangledName.str());
     bool isMangledMatch = MangledIt != user_workloads.end();
 
-    auto PreMangledIt = user_workloads.find(name);
+    auto PreMangledIt = user_workloads.find(name.str());
     bool isPreMangledMatch = PreMangledIt != user_workloads.end();
 
     if (isMangledMatch | isPreMangledMatch) {
@@ -309,7 +357,8 @@ bool Tracer::runOnFunction(Function &F) {
   // that differs from the canonical name, then it must be a C++ function that
   // should be skipped.
   StringRef mangledName = F.getName();
-  auto it = mangledNameMap.find(mangledName);
+  errs()<<"mangledName:"<<mangledName<<"\n";
+  auto it = mangledNameMap.find(mangledName.str());
   if (it == mangledNameMap.end() || it->second != mangledName)
     return false;
 
@@ -529,17 +578,20 @@ void Tracer::collectDebugInfo(DbgInfoIntrinsic *debug) {
   DILocalVariable *var = nullptr;
   if (DbgDeclareInst *dbgDeclare = dyn_cast<DbgDeclareInst>(debug)) {
     arg = dbgDeclare->getAddress();
+    errs()<<"declarearg:"<<*arg<<"\n";
     var = dbgDeclare->getVariable();
     if (isa<UndefValue>(arg) || !var)
       return;
   } else if (DbgValueInst *dbgValue = dyn_cast<DbgValueInst>(debug)) {
     arg = dbgValue->getValue();
     var = dbgValue->getVariable();
+    errs()<<"valuearg:"<<*arg<<"\n";
     if (isa<UndefValue>(arg) || !var)
       return;
   } else if (DbgAddrIntrinsic *dbgAddr = dyn_cast<DbgAddrIntrinsic>(debug)) {
     arg = dbgDeclare->getAddress();
     var = dbgAddr->getVariable();
+    errs()<<"addrarg:"<<*arg<<"\n";
     if (isa<UndefValue>(arg) || !var)
       return;
   } else {
@@ -622,19 +674,24 @@ void Tracer::printParamLine(Instruction *I, int param_num, const char *reg_id,
   Value *v_is_phi = ConstantInt::get(IRB.getInt64Ty(), is_phi);
   Constant *vv_reg_id = createStringArgIfNotExists(reg_id);
   Constant *vv_prev_bbid = createStringArgIfNotExists(prev_bbid);
-
+  errs()<<"isinst:"<<is_intrinsic<<"\n";
+  errs()<<"vv_reg_id" <<reg_id<<"\n"; 
   if (value != nullptr) {
     if (datatype == llvm::Type::IntegerTyID) {
       Value *v_value = IRB.CreateZExt(value, IRB.getInt64Ty());
-      Value *args[] = { v_param_num,    v_size,   v_value,     v_is_reg,
-                        vv_reg_id, v_is_phi, vv_prev_bbid };
-      IRB.CreateCall(TL_log_int, args);
+      Value* args[]= { v_param_num, v_size, v_value, v_is_reg, vv_reg_id, v_is_phi, vv_prev_bbid };
+      //errs()<<"printargs:"<<args<<"\n";
+      //ArrayRef<Value*> args = llvm::makeArrayRef(args1);
+
+      //Value *args[] = { v_param_num,    v_size,   v_value,     v_is_reg,
+      //                  vv_reg_id, v_is_phi, vv_prev_bbid };
+      IRB.CreateCall(TL_log_int_type,TL_log_int,args);
     } else if (datatype >= llvm::Type::HalfTyID &&
                datatype <= llvm::Type::PPC_FP128TyID) {
       Value *v_value = IRB.CreateFPExt(value, IRB.getDoubleTy());
       Value *args[] = { v_param_num,    v_size,   v_value,     v_is_reg,
                         vv_reg_id, v_is_phi, vv_prev_bbid };
-      IRB.CreateCall(TL_log_double, args);
+      IRB.CreateCall(TL_log_double_type,TL_log_double, args);
     } else if (datatype == llvm::Type::PointerTyID) {
       Value *v_value = nullptr;
       Type *pteetype = value->getType()->getPointerElementType();
@@ -647,16 +704,26 @@ void Tracer::printParamLine(Instruction *I, int param_num, const char *reg_id,
         // TODO: the code below only works for constant expressio strings, but
         // not for mutable strings.
         if (IntegerType *itype = dyn_cast<IntegerType>(pteetype)) {
+          errs()<<"itype:"<<itype->getBitWidth()<<"\n";
           if (itype->getBitWidth() == 8) {
             if (ConstantExpr *ce = dyn_cast<ConstantExpr>(value)) {
+              //errs()<<"is_initializer1:"<<gv->hasInitializer()<<"\n";
               if (GlobalVariable *gv =
                       dyn_cast<GlobalVariable>(ce->getOperand(0))) {
-                if (ConstantDataArray *array =
+                    errs()<<"is_initializer2:"<<gv->hasInitializer()<<"\n";  
+                    if(gv->hasInitializer()){
+                                      if (ConstantDataArray *array =
                         dyn_cast<ConstantDataArray>(gv->getInitializer())) {
+                  errs()<<"is_initializer3:"<<gv->hasInitializer()<<"\n";
                   v_value =
                       createStringArgIfNotExists(array->getAsCString().data());
                   is_string = true;
+
+
+                  errs()<<"v_value:"<<*v_value<<"\n";
                 }
+                    }
+
               }
             }
           }
@@ -665,16 +732,16 @@ void Tracer::printParamLine(Instruction *I, int param_num, const char *reg_id,
       Value *args[] = { v_param_num, v_size,   v_value,     v_is_reg,
                         vv_reg_id,   v_is_phi, vv_prev_bbid };
       if (is_string)
-        IRB.CreateCall(TL_log_string, args);
+        IRB.CreateCall(TL_log_string_type,TL_log_string, args);
       else
-        IRB.CreateCall(TL_log_ptr, args);
-    } else if (datatype == llvm::Type::VectorTyID) {
+        IRB.CreateCall(TL_log_ptr_type,TL_log_ptr, args);
+    } else if (datatype == llvm::Type::FixedVectorTyID || datatype == llvm::Type::ScalableVectorTyID ) {
       // Give the logger function a pointer to the data. We'll read it out in
       // the logger function itself.
       Value *v_value = createVectorArg(value, IRB);
       Value *args[] = { v_param_num,    v_size,   v_value,     v_is_reg,
                         vv_reg_id, v_is_phi, vv_prev_bbid };
-      IRB.CreateCall(TL_log_vector, args);
+      IRB.CreateCall(TL_log_vector_type,TL_log_vector, args);
     } else {
       errs() << "[WARNING]: Encountered unhandled datatype ";
       if (datatype == Type::FunctionTyID) {
@@ -695,7 +762,7 @@ void Tracer::printParamLine(Instruction *I, int param_num, const char *reg_id,
     Value *v_value = ConstantInt::get(IRB.getInt64Ty(), 0);
     Value *args[] = { v_param_num,    v_size,   v_value,     v_is_reg,
                       vv_reg_id, v_is_phi, vv_prev_bbid };
-    IRB.CreateCall(TL_log_int, args);
+    IRB.CreateCall(TL_log_int_type,TL_log_int, args);
   }
 }
 
@@ -721,7 +788,7 @@ void Tracer::printFirstLine(Instruction *I, InstEnv *env, unsigned opcode) {
   Value *args[] = { v_linenumber,      vv_func_name, vv_bb,
                     vv_inst,           v_opty,       v_is_tracked_function,
                     v_is_toplevel_mode };
-  IRB.CreateCall(TL_log0, args);
+  IRB.CreateCall(TL_log0_type,TL_log0, args);
 }
 
 void Tracer::printTopLevelEntryFirstLine(Instruction *I, InstEnv *env,
@@ -730,7 +797,7 @@ void Tracer::printTopLevelEntryFirstLine(Instruction *I, InstEnv *env,
   Constant *vv_func_name = createStringArgIfNotExists(env->funcName);
   Value* v_num_params = ConstantInt::get(IRB.getInt64Ty(), num_params);
   Value *args[] = { vv_func_name, v_num_params };
-  IRB.CreateCall(TL_log_entry, args);
+  IRB.CreateCall(TL_log_entry_type, TL_log_entry,args);
 }
 
 void Tracer::updateTracerStatus(Instruction *I, InstEnv *env, int opcode) {
@@ -746,7 +813,7 @@ void Tracer::updateTracerStatus(Instruction *I, InstEnv *env, int opcode) {
       ConstantInt::get(IRB.getInt1Ty(), is_toplevel_mode);
   Value *args[] = {func_name, v_opcode, v_is_tracked_function,
                    v_is_toplevel_mode};
-  IRB.CreateCall(TL_update_status, args);
+  IRB.CreateCall(TL_update_status_type, TL_update_status,args);
 }
 
 unsigned Tracer::opcodeToFixedPoint(unsigned opcode) {
@@ -898,6 +965,8 @@ void Tracer::setLineNumberIfExists(Instruction *I, InstEnv *env) {
   // Otherwise, use debug info.
   if (MDNode *N = I->getMetadata("dbg")) {
     DILocation* loc = dyn_cast<DILocation>(N);
+    //StringRef filename =  loc->getFilename();
+    //errs()<<"filename:"<<filename.str()<<"\n";
     if (loc) {
       env->line_number = loc->getLine();
       return;
@@ -977,6 +1046,7 @@ void Tracer::handleCallInstruction(Instruction* inst, InstEnv* env) {
   CallInst *CI = dyn_cast<CallInst>(inst);
   Function *fun = CI->getCalledFunction();
   strcpy(caller_op_name, (char *)fun->getName().str().c_str());
+  errs()<<"handle_func_name"<<fun->getName().str()<<"\n";
   unsigned opcode;
   if (fun->getName() == "dmaLoad")
     opcode = DMA_LOAD;
@@ -1003,12 +1073,17 @@ void Tracer::handleCallInstruction(Instruction* inst, InstEnv* env) {
 
   // Print the line that names the function being called.
   int num_operands = inst->getNumOperands();
+  errs()<<"handle_num_operands:"<<num_operands<<"\n";
   Value* func_name_op = inst->getOperand(num_operands - 1);
+  errs()<<"handle_func_name_op:"<<*func_name_op<<"\n";
   InstOperandParams params;
   params.param_num = num_operands;
   params.operand_name = caller_op_name;
   params.bbid = nullptr;
   params.datatype = func_name_op->getType()->getTypeID();
+  errs()<<"handle_func_name_tyoe_id:"<<func_name_op->getType()->getTypeID()<<"\n";
+  errs()<<"handle_func_name_is_pointty:"<<func_name_op->getType()->isPointerTy()<<"\n";
+
   params.datasize = getMemSize(func_name_op->getType());
   params.value = func_name_op;
   params.is_reg = func_name_op->hasName();
@@ -1081,7 +1156,7 @@ void Tracer::handleNonPhiNonCallInstruction(Instruction *inst, InstEnv* env) {
       ValueNameLookup name = getValueName(curr_operand);
       params.is_reg = name.first;
       strcpy(params.operand_name, name.second.str().c_str());
-
+      errs()<<"curr_operand:" << *curr_operand << "\n";
       if (Instruction *I = dyn_cast<Instruction>(curr_operand)) {
         setOperandNameAndReg(I, &params);
         params.value = curr_operand;
@@ -1098,6 +1173,7 @@ void Tracer::handleNonPhiNonCallInstruction(Instruction *inst, InstEnv* env) {
           params.value = curr_operand;
         }
       }
+      errs()<<"params.datatype:" << params.datatype << "\n";
       printParamLine(inst, &params);
     }
   }
@@ -1152,9 +1228,9 @@ Constant *Tracer::createStringArgIfNotExists(const char *str) {
 
 Tracer::VecBufKey Tracer::createVecBufKey(Type* vector_type) {
   assert(vector_type->isVectorTy());
-  unsigned num_elements = vector_type->getVectorNumElements();
+  unsigned num_elements = vector_type->getArrayNumElements();
   unsigned scalar_size = vector_type->getScalarSizeInBits() / 8;
-  Type::TypeID element_type = vector_type->getVectorElementType()->getTypeID();
+  Type::TypeID element_type = vector_type->getArrayElementType()->getTypeID();
   VecBufKey key = std::make_tuple(num_elements, scalar_size, element_type);
   return key;
 }
@@ -1176,7 +1252,10 @@ Value *Tracer::createVectorArg(Value *vector, IRBuilder<> &IRB) {
   } else {
     alloca = vector_buffers.at(key);
   }
-  IRB.CreateAlignedStore(vector, alloca, std::get<1>(key));
+  //IRB.CreateAlignedStore(vector, alloca, std::get<1>(key));
+  //MaybeAlign align = std::get<1>(key);
+  MaybeAlign maybealian = align ? MaybeAlign(1):MaybeAlign(0); 
+  IRB.CreateAlignedStore(vector, alloca, maybealian);
   Value *bitcast = IRB.CreatePointerCast(alloca, IRB.getInt8PtrTy());
   return bitcast;
 }
@@ -1197,22 +1276,26 @@ bool LabelMapHandler::runOnModule(Module &M) {
         return false;
 
     IRBuilder<> builder(cast<Instruction>(main->front().getFirstInsertionPt()));
-    Function *traceLoggerInit = cast<Function>(
-        M.getOrInsertFunction("trace_logger_init", builder.getVoidTy()));
-    builder.CreateCall(traceLoggerInit);
+    auto callee2 = M.getOrInsertFunction("trace_logger_init", builder.getVoidTy());
+
+    //Function *traceLoggerInit = cast<Function>(callee2);
+    builder.CreateCall(callee2);
     bool contains_labelmap = readLabelMap();
     if (contains_labelmap) {
       if (verbose)
         errs() << "Contents of labelmap:\n" << labelmap_str << "\n";
-
-      Function *labelMapRegister = cast<Function>(M.getOrInsertFunction(
+        
+        callee2 = M.getOrInsertFunction(
           "trace_logger_register_labelmap", builder.getVoidTy(),
-          builder.getInt8PtrTy(), builder.getInt64Ty()));
+          builder.getInt8PtrTy(), builder.getInt64Ty());
+
+      //Function *labelMapRegister = cast<Function>(callee2);
       Value *v_size =
           ConstantInt::get(builder.getInt64Ty(), labelmap_str.length());
+      errs()<<"v_size:"<<*v_size<<"\n";
       Constant *v_buf = createStringArg(labelmap_str.c_str(), &M);
       Value *args[] = { v_buf, v_size };
-      builder.CreateCall(labelMapRegister, args);
+      builder.CreateCall(callee2.getFunctionType(),cast<Constant>(callee2.getCallee()) ,args);
     }
 
     return true;

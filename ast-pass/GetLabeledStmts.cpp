@@ -26,6 +26,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/Attr.h"
+#include "clang/AST/Stmt.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/AttrKinds.h"
 #include "clang/Driver/Options.h"
@@ -113,7 +114,8 @@ class LabeledStmtVisitor : public RecursiveASTVisitor<LabeledStmtVisitor> {
   // Add a (function,label) -> line number mapping.
   void addToLabelMap(LabelStmt* labelStmt, Stmt* subStmt,
                      const FunctionDecl* func) const {
-    SourceLocation loc = subStmt->getLocStart();
+    SourceLocation loc = subStmt->getBeginLoc();
+    
     unsigned line = srcManager->getExpansionLineNumber(loc);
     const std::string& labelName = labelStmt->getName();
     const std::string& funcName = func->getQualifiedNameAsString();
@@ -307,9 +309,16 @@ static void cleanup() {
     std::remove(outputFileName.c_str());
   }
 }
+class MyOptionsParser : public CommonOptionsParser {
+public:
+  MyOptionsParser(int &argc, const char **argv, cl::OptionCategory &Category)
+      : CommonOptionsParser(argc, argv, Category) {
+    // 在构造函数中进行您的自定义逻辑
+  }
+};
 
 int main(int argc, const char** argv) {
-  CommonOptionsParser op(argc, argv, GetLabelStmtsCat);
+  MyOptionsParser op(argc, argv, GetLabelStmtsCat);
   ClangTool Tool(op.getCompilations(), op.getSourcePathList());
   outputFileName = OutputFileName.getValue();
   cleanup();

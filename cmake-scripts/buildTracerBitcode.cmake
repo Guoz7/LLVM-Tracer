@@ -10,12 +10,12 @@ function(build_tracer_bitcode TEST_NAME f_SRC WORKLOAD)
 
   set(FULLTRACE_SO "$<TARGET_FILE:full_trace>")
 
-  set(CFLAGS "-g" "-O1" "-fno-slp-vectorize" "-fno-vectorize"
-		"-fno-unroll-loops" "-fno-inline" "-fno-builtin"
+  set(CFLAGS  "-g" "-O1" "-fno-slp-vectorize" "-fno-vectorize"
+		"-fno-unroll-loops" "-fno-inline"  "-fno-builtin"
                 "-I${ZLIB_INCLUDE_DIRS}")
 
-  set(OPT_FLAGS "-disable-inlining" "-S" "-load=${FULLTRACE_SO}" "-fulltrace")
-  set(LLC_FLAGS "-O0" "-disable-fp-elim" "-filetype=asm")
+  set(OPT_FLAGS "-disable-inlining" "-enable-new-pm=0" "-S" "-load=${FULLTRACE_SO}" "-fulltrace")
+  set(LLC_FLAGS "-O0"  "-filetype=asm")
   set(FINAL_CXX_FLAGS "-O0" "-fno-inline" "-no-pie")
 
   # Add ZLIB location.
@@ -35,7 +35,10 @@ function(build_tracer_bitcode TEST_NAME f_SRC WORKLOAD)
 
   add_custom_command(OUTPUT ${FULL_S} DEPENDS ${FULL_OPT_LLVM}
     COMMAND ${LLVM_LLC} ${LLC_FLAGS} -o ${FULL_S}  ${FULL_OPT_LLVM}
+    COMMAND sed -i "s/\" \"/\\//g" ${FULL_S}
+    COMMAND echo "replaced the \" \" with / ;"
     VERBATIM)
+
 
   add_custom_command(OUTPUT ${PROFILE_EXE} DEPENDS ${FULL_S}
     COMMAND g++ ${FINAL_CXX_FLAGS} -o ${PROFILE_EXE} ${FULL_S} ${FINAL_CXX_LDFLAGS}

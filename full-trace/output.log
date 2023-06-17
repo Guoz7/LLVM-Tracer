@@ -1,0 +1,160 @@
+196c196,197
+<     size = cast<IntegerType>(T)->getBitWidth();
+---
+>     //size = dyn_cast<IntegerType>(T)->getBitWidth();
+>     size = T->getIntegerBitWidth();
+198c199,201
+<     size = cast<VectorType>(T)->getBitWidth();
+---
+>     unsigned numElements = cast<VectorType>(T)->getArrayNumElements();
+>     unsigned bitWidth = cast<VectorType>(T)->getElementType()->getScalarSizeInBits();
+>     size = numElements * bitWidth;
+228,231c231,237
+<   TL_log_entry = M.getOrInsertFunction("trace_logger_log_entry", VoidTy,
+<                                        I8PtrTy, I64Ty);
+< 
+<   TL_log0 = M.getOrInsertFunction( "trace_logger_log0", VoidTy,
+---
+>   auto Callee1 = M.getOrInsertFunction("trace_logger_log_entry", VoidTy,
+>                                       I8PtrTy, I64Ty);
+>   TL_log_entry = cast<Constant>(Callee1.getCallee());
+>   TL_log_entry_type = Callee1.getFunctionType();
+>   //TL_log_entry = M.getOrInsertFunction("trace_logger_log_entry", VoidTy,
+>   //                                     I8PtrTy, I64Ty);
+>   Callee1 = M.getOrInsertFunction( "trace_logger_log0", VoidTy,
+232a239,242
+>   TL_log0 = cast<Constant>(Callee1.getCallee());
+>   TL_log0_type = Callee1.getFunctionType();
+>   //TL_log0 = M.getOrInsertFunction( "trace_logger_log0", VoidTy,
+>       //I64Ty, I8PtrTy, I8PtrTy, I8PtrTy, I64Ty, I1Ty, I1Ty);
+234c244
+<   TL_log_int = M.getOrInsertFunction( "trace_logger_log_int", VoidTy,
+---
+>   Callee1 = M.getOrInsertFunction( "trace_logger_log_int", VoidTy,
+236c246,250
+< 
+---
+>   TL_log_int = cast<Constant>(Callee1.getCallee());
+>   TL_log_int_type = Callee1.getFunctionType();
+>   //TL_log_int = M.getOrInsertFunction( "trace_logger_log_int", VoidTy,
+>     //  I64Ty, I64Ty, I64Ty, I64Ty, I8PtrTy, I64Ty, I8PtrTy);
+> /*
+251a266,287
+> */
+> 
+>  Callee1 = M.getOrInsertFunction("trace_logger_log_ptr", VoidTy, I64Ty, I64Ty, I64Ty, I64Ty, I8PtrTy, I64Ty, I8PtrTy);
+> TL_log_ptr = cast<llvm::Function>(Callee1.getCallee());
+> TL_log_ptr_type = Callee1.getFunctionType();
+> 
+> Callee1 = M.getOrInsertFunction("trace_logger_log_string", VoidTy, I64Ty, I64Ty, I8PtrTy, I64Ty, I8PtrTy, I64Ty, I8PtrTy);
+> TL_log_string = cast<llvm::Function>(Callee1.getCallee());
+> TL_log_string_type = Callee1.getFunctionType();
+> 
+> Callee1 = M.getOrInsertFunction("trace_logger_log_double", VoidTy, I64Ty, I64Ty, DoubleTy, I64Ty, I8PtrTy, I64Ty, I8PtrTy);
+> TL_log_double = cast<llvm::Function>(Callee1.getCallee());
+> TL_log_double_type =  Callee1.getFunctionType();
+> 
+> Callee1 = M.getOrInsertFunction("trace_logger_log_vector", VoidTy, I64Ty, I64Ty, I8PtrTy, I64Ty, I8PtrTy, I64Ty, I8PtrTy);
+> TL_log_vector = cast<llvm::Function>(Callee1.getCallee());
+> TL_log_vector_type = Callee1.getFunctionType();
+> 
+> Callee1 = M.getOrInsertFunction("trace_logger_update_status", VoidTy, I8PtrTy, I64Ty, I1Ty, I1Ty);
+> TL_update_status = cast<llvm::Function>(Callee1.getCallee());
+> TL_update_status_type = Callee1.getFunctionType();
+> 
+279c315
+<     auto MangledIt = user_workloads.find(mangledName);
+---
+>     auto MangledIt = user_workloads.find(mangledName.str());
+282c318
+<     auto PreMangledIt = user_workloads.find(name);
+---
+>     auto PreMangledIt = user_workloads.find(name.str());
+312c348
+<   auto it = mangledNameMap.find(mangledName);
+---
+>   auto it = mangledNameMap.find(mangledName.str());
+629,631c665,670
+<       Value *args[] = { v_param_num,    v_size,   v_value,     v_is_reg,
+<                         vv_reg_id, v_is_phi, vv_prev_bbid };
+<       IRB.CreateCall(TL_log_int, args);
+---
+>       Value* args[]= { v_param_num, v_size, v_value, v_is_reg, vv_reg_id, v_is_phi, vv_prev_bbid };
+>       //ArrayRef<Value*> args = llvm::makeArrayRef(args1);
+> 
+>       //Value *args[] = { v_param_num,    v_size,   v_value,     v_is_reg,
+>       //                  vv_reg_id, v_is_phi, vv_prev_bbid };
+>       IRB.CreateCall(TL_log_int_type,TL_log_int,args);
+637c676
+<       IRB.CreateCall(TL_log_double, args);
+---
+>       IRB.CreateCall(TL_log_double_type,TL_log_double, args);
+668c707
+<         IRB.CreateCall(TL_log_string, args);
+---
+>         IRB.CreateCall(TL_log_string_type,TL_log_string, args);
+670,671c709,710
+<         IRB.CreateCall(TL_log_ptr, args);
+<     } else if (datatype == llvm::Type::VectorTyID) {
+---
+>         IRB.CreateCall(TL_log_ptr_type,TL_log_ptr, args);
+>     } else if (datatype == llvm::Type::FixedVectorTyID || datatype == llvm::Type::ScalableVectorTyID ) {
+677c716
+<       IRB.CreateCall(TL_log_vector, args);
+---
+>       IRB.CreateCall(TL_log_vector_type,TL_log_vector, args);
+698c737
+<     IRB.CreateCall(TL_log_int, args);
+---
+>     IRB.CreateCall(TL_log_int_type,TL_log_int, args);
+724c763
+<   IRB.CreateCall(TL_log0, args);
+---
+>   IRB.CreateCall(TL_log0_type,TL_log0, args);
+733c772
+<   IRB.CreateCall(TL_log_entry, args);
+---
+>   IRB.CreateCall(TL_log_entry_type, TL_log_entry,args);
+749c788
+<   IRB.CreateCall(TL_update_status, args);
+---
+>   IRB.CreateCall(TL_update_status_type, TL_update_status,args);
+1155c1194
+<   unsigned num_elements = vector_type->getVectorNumElements();
+---
+>   unsigned num_elements = vector_type->getArrayNumElements();
+1157c1196
+<   Type::TypeID element_type = vector_type->getVectorElementType()->getTypeID();
+---
+>   Type::TypeID element_type = vector_type->getArrayElementType()->getTypeID();
+1179c1218,1221
+<   IRB.CreateAlignedStore(vector, alloca, std::get<1>(key));
+---
+>   //IRB.CreateAlignedStore(vector, alloca, std::get<1>(key));
+>   //MaybeAlign align = std::get<1>(key);
+>   MaybeAlign maybealian = align ? MaybeAlign(1):MaybeAlign(0); 
+>   IRB.CreateAlignedStore(vector, alloca, maybealian);
+1200,1202c1242,1245
+<     Function *traceLoggerInit = cast<Function>(
+<         M.getOrInsertFunction("trace_logger_init", builder.getVoidTy()));
+<     builder.CreateCall(traceLoggerInit);
+---
+>     auto callee2 = M.getOrInsertFunction("trace_logger_init", builder.getVoidTy());
+> 
+>     //Function *traceLoggerInit = cast<Function>(callee2);
+>     builder.CreateCall(callee2);
+1207,1208c1250
+< 
+<       Function *labelMapRegister = cast<Function>(M.getOrInsertFunction(
+---
+>         callee2 = M.getOrInsertFunction(
+1210c1252,1254
+<           builder.getInt8PtrTy(), builder.getInt64Ty()));
+---
+>           builder.getInt8PtrTy(), builder.getInt64Ty());
+> 
+>       //Function *labelMapRegister = cast<Function>(callee2);
+1215c1259
+<       builder.CreateCall(labelMapRegister, args);
+---
+>       builder.CreateCall(callee2.getFunctionType(),cast<Constant>(callee2.getCallee()) ,args);

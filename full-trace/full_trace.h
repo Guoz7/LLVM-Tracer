@@ -270,6 +270,16 @@ class Tracer : public FunctionPass {
     Value *TL_log_vector;
     Value *TL_log_entry;
     Value *TL_update_status;
+    
+    FunctionType *TL_log0_type;
+    FunctionType *TL_log_int_type;
+    FunctionType *TL_log_ptr_type;
+    FunctionType *TL_log_string_type;
+    FunctionType *TL_log_double_type;
+    FunctionType *TL_log_vector_type;
+    FunctionType *TL_log_entry_type;
+    FunctionType *TL_update_status_type;
+
 
     // The current module.
     Module *curr_module;
